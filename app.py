@@ -759,6 +759,11 @@ elif menu == 'Configurações':
 # Rodapé lateral estilizado
 st.sidebar.markdown('---')
 st.sidebar.markdown(
-    ""
+    """
     <div style="text-align: center; color: gray; font-size: 0.8em;">
-        PeegFlow System v2.1
+        PeegFlow System v2.1<br>
+        Powered by Streamlit
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
