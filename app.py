@@ -542,7 +542,8 @@ elif menu == 'Produtos':
             if submit:
                 supplier_id = int(supplier_sel) if supplier_sel not in (None, 'None') else None
                 add_product(conn, sku.strip(), name.strip(), category.strip(), float(price_retail), float(price_wholesale), int(stock), int(stock_min), supplier_id)
-          st.markdown('---')
+    
+    st.markdown('---')
     dfp = list_products(conn)
     st.dataframe(dfp, use_container_width=True)
     if not dfp.empty:
