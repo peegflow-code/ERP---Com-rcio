@@ -1,7 +1,3 @@
-# Sistema Completo Atacado & Varejo (Modelo C - Com Demo Corrigida)
-# Arquivo: app.py
-# Como usar: streamlit run app.py
-
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -10,6 +6,90 @@ import hashlib
 import altair as alt
 import io
 import random
+
+# ==========================================
+# CONFIGURAÇÃO DA PÁGINA & ESTILO (CSS)
+# ==========================================
+st.set_page_config(
+    page_title='PeegFlow - Comercial',
+    page_icon='🔹',
+    layout='wide',
+    initial_sidebar_state="expanded"
+)
+
+# Paleta de Cores: Azul Royal (#4169E1 a #1A237E) e Verde Menta (#98FF98 a #00C896)
+st.markdown("""
+    <style>
+        /* Fundo Geral (Dark Mode suave) */
+        .stApp {
+            background-color: #0e1117;
+        }
+        
+        /* Sidebar - Azul Royal Gradiente */
+        [data-testid="stSidebar"] {
+            background-color: #1a237e;
+            background-image: linear-gradient(180deg, #1a237e 0%, #0d1b3e 100%);
+            border-right: 1px solid #4169E1;
+        }
+        
+        /* Textos da Sidebar */
+        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] span, [data-testid="stSidebar"] p {
+            color: #ffffff !important;
+        }
+        
+        /* Botões Primários (Verde Menta) */
+        div.stButton > button:first-child {
+            background-color: #00C896; 
+            color: #0d1b3e;
+            font-weight: bold;
+            border-radius: 8px;
+            border: none;
+            padding: 0.5rem 1rem;
+        }
+        div.stButton > button:first-child:hover {
+            background-color: #98FF98;
+            color: #000000;
+            box-shadow: 0 0 10px #00C896;
+        }
+
+        /* Títulos Principais (H1) */
+        h1 {
+            color: #4169E1 !important; /* Azul Royal Claro */
+            font-weight: 800;
+        }
+        
+        /* Subtítulos (H2, H3) */
+        h2, h3 {
+            color: #00C896 !important; /* Menta */
+        }
+
+        /* Cards de Métricas */
+        [data-testid="stMetricValue"] {
+            color: #98FF98 !important; /* Texto do valor em Menta */
+        }
+        [data-testid="stMetricLabel"] {
+            color: #aaaaaa !important;
+        }
+        
+        /* Inputs e Selectboxes */
+        div[data-baseweb="select"] > div, div[data-baseweb="input"] > div {
+            background-color: #1c1f26;
+            border-color: #4169E1;
+            color: white;
+        }
+        
+        /* Tabelas */
+        [data-testid="stDataFrame"] {
+            border: 1px solid #4169E1;
+        }
+        
+        /* Radio Buttons na Sidebar */
+        .st-emotion-cache-16txtl3 {
+            color: white;
+        }
+        
+    </style>
+""", unsafe_allow_html=True)
 
 DB_PATH = 'sistema.db'
 
@@ -166,11 +246,11 @@ def record_sale(conn, product_id, quantity, kind, user_id=None, sale_price=None,
         if r is None:
             return False, 'Produto não encontrado'
         sale_price = float(r['price_retail']) if kind == 'varejo' else float(r['price_wholesale'])
-    
+
     ok = update_stock(conn, product_id, -int(quantity))
     if not ok:
         return False, 'Estoque insuficiente'
-    
+
     c.execute('INSERT INTO sales(product_id,quantity,price,kind,date,user_id) VALUES(?,?,?,?,?,?)', (product_id, quantity, sale_price, kind, when, user_id))
     conn.commit()
     return True, None
@@ -190,15 +270,14 @@ def add_expense(conn, description, amount, when=None, category=None):
     c.execute('INSERT INTO expenses(description,amount,date,category) VALUES(?,?,?,?)', (description, amount, when, category))
     conn.commit()
 
-# ----------------- Consultas / Relatórios (CORRIGIDO AQUI) -----------------
+# ----------------- Consultas / Relatórios -----------------
 def get_sales_df(conn, since=None, until=None):
     q = 'SELECT s.*, p.name FROM sales s LEFT JOIN products p ON p.id = s.product_id'
     df = pd.read_sql_query(q, conn)
     if df.empty:
         return df
-    # CORREÇÃO: format='mixed' permite datas com e sem hora misturadas
     df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce')
-    
+
     if since is not None:
         df = df[df['date'] >= pd.to_datetime(since)]
     if until is not None:
@@ -209,9 +288,8 @@ def get_purchases_df(conn, since=None, until=None):
     df = pd.read_sql_query('SELECT pu.*, p.name FROM purchases pu LEFT JOIN products p ON p.id = pu.product_id', conn)
     if df.empty:
         return df
-    # CORREÇÃO: format='mixed'
     df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce')
-    
+
     if since is not None:
         df = df[df['date'] >= pd.to_datetime(since)]
     if until is not None:
@@ -222,9 +300,8 @@ def get_expenses_df(conn, since=None, until=None):
     df = pd.read_sql_query('SELECT * FROM expenses', conn)
     if df.empty:
         return df
-    # CORREÇÃO: format='mixed'
     df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce')
-    
+
     if since is not None:
         df = df[df['date'] >= pd.to_datetime(since)]
     if until is not None:
@@ -235,11 +312,11 @@ def financial_summary(conn, since, until):
     sales = get_sales_df(conn, since, until)
     purchases = get_purchases_df(conn, since, until)
     expenses = get_expenses_df(conn, since, until)
-    
+
     total_revenue = (sales['price'] * sales['quantity']).sum() if not sales.empty else 0.0
     total_cost_purchases = (purchases['unit_price'] * purchases['quantity']).sum() if not purchases.empty else 0.0
     total_expenses = expenses['amount'].sum() if not expenses.empty else 0.0
-    
+
     net = total_revenue - total_cost_purchases - total_expenses
     return {'revenue': total_revenue, 'purchases_cost': total_cost_purchases, 'expenses': total_expenses, 'net': net, 'sales_df': sales, 'purchases_df': purchases, 'expenses_df': expenses}
 
@@ -259,7 +336,6 @@ def get_setting(conn, key, default=None):
 def populate_demo_db(conn, user_id):
     """Gera dados fictícios para demonstração."""
     c = conn.cursor()
-    
     # 2. Criar Fornecedores
     suppliers_data = [
         ("Distribuidora Aliança", "contato@alianca.com.br"),
@@ -286,7 +362,7 @@ def populate_demo_db(conn, user_id):
         ("ELE-006", "Mouse Óptico USB", "Eletrônicos", 35.00, 22.00, 0, 10),
         ("PAP-007", "Papel A4 Resma", "Escritório", 28.00, 24.00, 0, 50)
     ]
-    
+
     product_ids = []
     for sku, nome, cat, pv, pa, st_ini, st_min in products_data:
         sup_id = random.choice(supplier_ids)
@@ -294,15 +370,14 @@ def populate_demo_db(conn, user_id):
         c.execute("SELECT id FROM products WHERE sku=?", (sku,))
         product_ids.append(c.fetchone()[0])
 
-    # 4. Simular Compras (Entrada de Estoque - Datas passadas)
-    today = datetime.now() # Alterado para datetime para evitar conflito
+    # 4. Simular Compras e Vendas
+    today = datetime.now()
     for pid in product_ids:
         qty = random.randint(200, 600)
         cost = random.uniform(1.0, 20.0)
         past_date = (today - timedelta(days=random.randint(25, 30))).isoformat()
         record_purchase(conn, pid, qty, cost, random.choice(supplier_ids), when=past_date)
 
-    # 5. Simular Vendas (Saída - Espalhadas)
     kinds = ['varejo', 'atacado']
     for _ in range(150): 
         pid = random.choice(product_ids)
@@ -310,10 +385,8 @@ def populate_demo_db(conn, user_id):
         kind = random.choice(kinds)
         days_ago = random.randint(0, 30)
         sale_date = (today - timedelta(days=days_ago)).isoformat()
-        
         record_sale(conn, pid, qty, kind, user_id=user_id, when=sale_date)
 
-    # 6. Simular Despesas
     expenses_data = [
         ("Aluguel Galpão", 2500.00, "Fixa"),
         ("Conta de Luz", 450.00, "Variável"),
@@ -322,93 +395,102 @@ def populate_demo_db(conn, user_id):
         ("Material Limpeza", 80.00, "Consumo"),
         ("Café da Tarde", 200.00, "Consumo")
     ]
-    
     for desc, valor, cat in expenses_data:
         days_ago = random.randint(1, 28)
         exp_date = (today - timedelta(days=days_ago)).isoformat()
         add_expense(conn, desc, valor, when=exp_date, category=cat)
-        
+
     return True
 
 # ----------------- Inicialização -----------------
 conn = get_connection()
 init_db(conn)
 
-# criar usuário admin padrão se não existir
 c = conn.cursor()
 c.execute('SELECT COUNT(*) as cnt FROM users')
 r = c.fetchone()
 if r['cnt'] == 0:
     create_user(conn, 'admin', 'admin123', role='admin')
 
-st.set_page_config(page_title='Controle Atacado/Varejo', layout='wide')
-
-# ----------------- Autenticação simples -----------------
+# ----------------- Autenticação -----------------
 if 'user' not in st.session_state:
     st.session_state['user'] = None
 
 if st.session_state['user'] is None:
-    st.sidebar.title('Login')
-    with st.sidebar.form('login_form'):
-        username = st.text_input('Usuário')
-        password = st.text_input('Senha', type='password')
-        submit_login = st.form_submit_button('Entrar')
-        if submit_login:
-            user = authenticate(conn, username.strip(), password)
-            if user:
-                st.session_state['user'] = user
-                st.rerun()
-            else:
-                st.sidebar.error('Usuário ou senha inválidos')
-    st.sidebar.markdown('---')
-    st.sidebar.info('Usuário padrão: admin / admin123')
-    st.title('Acesse com um usuário para usar o sistema')
+    st.markdown("<h1 style='text-align: center; color: #4169E1;'>PeegFlow</h1>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1,2,1])
+    with c2:
+        with st.container(border=True):
+            st.markdown("### Acesso Restrito")
+            username = st.text_input('Usuário')
+            password = st.text_input('Senha', type='password')
+            submit_login = st.button('Entrar', type='primary', use_container_width=True)
+            if submit_login:
+                user = authenticate(conn, username.strip(), password)
+                if user:
+                    st.session_state['user'] = user
+                    st.rerun()
+                else:
+                    st.error('Usuário ou senha inválidos')
+            st.info('Usuário padrão: admin / admin123')
     st.stop()
 
 user = st.session_state['user']
 
-# ----------------- Layout principal -----------------
-st.sidebar.title(f'Usuário: {user["username"]}')
-st.sidebar.caption(f'Função: {user["role"]}')
-menu = st.sidebar.radio('Navegação', ['Dashboard', 'Produtos', 'Vendas', 'Compras', 'Estoque', 'Financeiro', 'Fornecedores', 'Configurações'])
+# ----------------- Layout principal (Sidebar) -----------------
+# Estilização do Logo/Marca na Sidebar
+st.sidebar.markdown(
+    """
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: #00C896 !important; font-size: 40px; margin-bottom: -10px;">P</h1>
+        <h2 style="color: white !important; font-size: 24px;">PeegFlow</h2>
+        <h5 style="color: #98FF98 !important; font-weight: 300;">COMERCIAL</h5>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
+st.sidebar.divider()
+st.sidebar.caption(f'👤 Olá, {user["username"]} ({user["role"]})')
+menu = st.sidebar.radio('MENU', ['Dashboard', 'Produtos', 'Vendas', 'Compras', 'Estoque', 'Financeiro', 'Fornecedores', 'Configurações'])
 
 # ----------------- Dashboard -----------------
 if menu == 'Dashboard':
-    st.title('Dashboard Gerencial')
+    st.title('📊 Dashboard Gerencial')
     today = date.today()
     col_d1, col_d2 = st.columns(2)
     start = col_d1.date_input('Data inicial', value=today.replace(day=1), key='db_start')
     end = col_d2.date_input('Data final', value=today, key='db_end')
-    
+
     if start > end:
         st.error('Data inicial não pode ser maior que a final')
     else:
         summary = financial_summary(conn, pd.to_datetime(start), pd.to_datetime(end) + pd.Timedelta(days=1))
-        
+
         # Cards de Métricas
         c1, c2, c3, c4 = st.columns(4)
         c1.metric('Receita Bruta', f'R$ {summary["revenue"]:.2f}')
         c2.metric('Custo (Produtos)', f'R$ {summary["purchases_cost"]:.2f}')
         c3.metric('Despesas Op.', f'R$ {summary["expenses"]:.2f}')
-        
+
         lucro = summary["net"]
         c4.metric('Lucro Estimado', f'R$ {lucro:.2f}', delta_color="normal" if lucro >= 0 else "inverse")
 
         st.markdown('---')
-        
+
         # Gráficos
         sales = summary['sales_df']
         if not sales.empty:
             sales['day'] = sales['date'].dt.date
             daily = sales.groupby('day').apply(lambda x: (x['price'] * x['quantity']).sum()).reset_index(name='revenue')
-            
-            st.subheader('Evolução de Vendas')
+
+            st.subheader('📈 Evolução de Vendas')
+            # Gráfico com as cores da marca
             chart = alt.Chart(daily).mark_area(
-                line={'color':'darkgreen'},
+                line={'color':'#4169E1'}, # Azul Royal na linha
                 color=alt.Gradient(
                     gradient='linear',
-                    stops=[alt.GradientStop(color='darkgreen', offset=0),
-                           alt.GradientStop(color='white', offset=1)],
+                    stops=[alt.GradientStop(color='#4169E1', offset=0),
+                           alt.GradientStop(color='#00C896', offset=1)], # Verde Menta no gradiente
                     x1=1, x2=1, y1=1, y2=0
                 )
             ).encode(
@@ -416,27 +498,27 @@ if menu == 'Dashboard':
                 y=alt.Y('revenue:Q', title='Receita (R$)'),
                 tooltip=['day', 'revenue']
             ).properties(height=300)
-            
+
             st.altair_chart(chart, use_container_width=True)
-            
+
             col_g1, col_g2 = st.columns(2)
-            
+
             if 'category' in list_products(conn).columns:
                  merged = sales.copy()
                  pie_data = merged.groupby('name')['quantity'].sum().reset_index()
                  with col_g1:
                      st.subheader('Top Produtos (Qtd)')
                      st.dataframe(pie_data.sort_values('quantity', ascending=False).head(5), hide_index=True, use_container_width=True)
-            
+
             with col_g2:
-                st.subheader('Últimas 5 Vendas')
+                st.subheader('Últimas Vendas')
                 st.dataframe(sales.sort_values('date', ascending=False).head(5)[['date', 'name', 'quantity', 'price']], hide_index=True, use_container_width=True)
         else:
             st.info("Sem dados de vendas neste período.")
 
 # ----------------- Produtos -----------------
 elif menu == 'Produtos':
-    st.title('Produtos')
+    st.title('📦 Produtos')
     with st.expander('Cadastrar novo produto'):
         suppliers = list_suppliers(conn)
         supplier_options = [None] + list(suppliers['id'].astype(str)) if not suppliers.empty else [None]
@@ -445,24 +527,22 @@ elif menu == 'Produtos':
             sku = c1.text_input('SKU (Código)')
             name = c2.text_input('Nome')
             category = st.text_input('Categoria')
-            
+
             c3, c4 = st.columns(2)
             price_retail = c3.number_input('Preço Varejo', min_value=0.0, format='%.2f')
             price_wholesale = c4.number_input('Preço Atacado', min_value=0.0, format='%.2f')
-            
+
             c5, c6 = st.columns(2)
             stock = c5.number_input('Estoque Inicial', min_value=0, step=1, value=0)
             stock_min = c6.number_input('Estoque Mínimo (Alerta)', min_value=0, step=1, value=0)
-            
+
             supplier_sel = st.selectbox('Fornecedor (ID)', supplier_options)
             submit = st.form_submit_button('Salvar produto')
-            
+
             if submit:
                 supplier_id = int(supplier_sel) if supplier_sel not in (None, 'None') else None
                 add_product(conn, sku.strip(), name.strip(), category.strip(), float(price_retail), float(price_wholesale), int(stock), int(stock_min), supplier_id)
-                st.success('Produto salvo')
-    
-    st.markdown('---')
+          st.markdown('---')
     dfp = list_products(conn)
     st.dataframe(dfp, use_container_width=True)
     if not dfp.empty:
@@ -470,31 +550,31 @@ elif menu == 'Produtos':
 
 # ----------------- Vendas -----------------
 elif menu == 'Vendas':
-    st.title('PDV - Registrar Venda')
+    st.title('🛒 PDV - Registrar Venda')
     dfp = list_products(conn)
-    
+
     if dfp.empty:
         st.warning('Nenhum produto cadastrado.')
     else:
         dfp['label'] = dfp['name'] + ' | Estoque: ' + dfp['stock'].astype(str)
-        
+
         with st.container(border=True):
             with st.form('sale'):
                 prod = st.selectbox('Selecione o Produto', dfp['label'])
                 # obter id
                 product_row = dfp[dfp['label'] == prod].iloc[0]
                 product_id = int(product_row['id'])
-                
+
                 c1, c2 = st.columns(2)
                 kind = c1.radio('Tipo de Venda', ['varejo', 'atacado'], horizontal=True)
                 qty = c2.number_input('Quantidade', min_value=1, step=1, value=1)
-                
+
                 with st.expander('Opções Avançadas'):
                     manual_price = st.checkbox('Sobrescrever preço?')
                     sale_price = st.number_input('Novo Preço Unitário', min_value=0.0, format='%.2f') if manual_price else None
 
                 submit_sale = st.form_submit_button('✅ Finalizar Venda', type='primary')
-                
+
                 if submit_sale:
                     ok, err = record_sale(conn, product_id, int(qty), kind, user_id=user['id'], sale_price=float(sale_price) if sale_price is not None else None)
                     if ok:
@@ -509,10 +589,10 @@ elif menu == 'Vendas':
 
 # ----------------- Compras -----------------
 elif menu == 'Compras':
-    st.title('Entrada de Estoque (Compras)')
+    st.title('📥 Entrada de Estoque')
     dfp = list_products(conn)
     suppliers = list_suppliers(conn)
-    
+
     if dfp.empty:
         st.warning('Cadastre produtos antes de dar entrada.')
     else:
@@ -521,14 +601,14 @@ elif menu == 'Compras':
             prod = st.selectbox('Produto', dfp['label'])
             product_row = dfp[dfp['label'] == prod].iloc[0]
             product_id = int(product_row['id'])
-            
+
             c1, c2, c3 = st.columns(3)
             qty = c1.number_input('Quantidade', min_value=1, step=1, value=1)
             unit_price = c2.number_input('Custo Unitário', min_value=0.0, format='%.2f')
-            
+
             supplier_opts = [None] + list(suppliers['id'].astype(str)) if not suppliers.empty else [None]
             supplier_sel = c3.selectbox('Fornecedor', supplier_opts)
-            
+
             submit_p = st.form_submit_button('Registrar Entrada')
             if submit_p:
                 supplier_id = int(supplier_sel) if supplier_sel not in (None, 'None') else None
@@ -542,25 +622,25 @@ elif menu == 'Compras':
 
 # ----------------- Estoque -----------------
 elif menu == 'Estoque':
-    st.title('Gestão de Estoque')
+    st.title('📋 Gestão de Estoque')
     dfp = list_products(conn)
-    
+
     if dfp.empty:
         st.info('Sem dados.')
     else:
         tab1, tab2 = st.tabs(["Ajuste Rápido", "Alertas de Reposição"])
-        
+
         with tab1:
             st.write("Use para correções de inventário (perdas, doações, erros).")
             dfp['label'] = dfp['name'] + ' | Atual: ' + dfp['stock'].astype(str)
-            
+
             c1, c2, c3 = st.columns([2, 1, 1])
             prod = c1.selectbox('Produto para Ajuste', dfp['label'])
             row = dfp[dfp['label'] == prod].iloc[0]
             pid = int(row['id'])
-            
+
             delta = c2.number_input('Qtd Ajuste (+/-)', value=0, step=1, help="Negativo para retirar, Positivo para adicionar")
-            
+
             if c3.button('Aplicar Ajuste'):
                 ok = update_stock(conn, pid, int(delta))
                 if ok:
@@ -580,24 +660,24 @@ elif menu == 'Estoque':
 
 # ----------------- Financeiro -----------------
 elif menu == 'Financeiro':
-    st.title('Controle Financeiro')
-    
+    st.title('💲 Controle Financeiro')
+
     with st.expander("Nova Despesa / Saída", expanded=False):
         with st.form('expense'):
             c1, c2 = st.columns(2)
             desc = c1.text_input('Descrição')
             cat = c2.text_input('Categoria (ex: Luz, Aluguel)')
-            
+
             c3, c4 = st.columns(2)
             amount = c3.number_input('Valor (R$)', min_value=0.0, format='%.2f')
             when = c4.date_input('Data', value=date.today())
-            
+
             if st.form_submit_button('Lançar Despesa'):
                 add_expense(conn, desc, float(amount), when.isoformat(), cat)
                 st.success('Salvo!')
 
     st.divider()
-    
+
     col_p1, col_p2 = st.columns([1, 3])
     with col_p1:
         st.subheader('Metas')
@@ -606,21 +686,21 @@ elif menu == 'Financeiro':
         if st.button('Atualizar Meta'):
             set_setting(conn, 'target_profit', target)
             st.toast('Meta atualizada')
-            
+
     with col_p2:
         st.subheader('Relatório Detalhado')
         start = st.date_input('Início', value=date.today().replace(day=1), key='f_start')
         end = st.date_input('Fim', value=date.today(), key='f_end')
-        
+
         summary = financial_summary(conn, pd.to_datetime(start), pd.to_datetime(end) + pd.Timedelta(days=1))
-        
+
         t1, t2 = st.tabs(['Vendas', 'Despesas'])
         t1.dataframe(summary['sales_df'], use_container_width=True)
         t2.dataframe(summary['expenses_df'], use_container_width=True)
 
 # ----------------- Fornecedores -----------------
 elif menu == 'Fornecedores':
-    st.title('Base de Fornecedores')
+    st.title('🤝 Base de Fornecedores')
     with st.form('add_supplier'):
         c1, c2 = st.columns(2)
         sname = c1.text_input('Nome Empresa')
@@ -629,13 +709,13 @@ elif menu == 'Fornecedores':
             add_supplier(conn, sname, scontact)
             st.success('Cadastrado!')
             st.rerun()
-            
+
     st.dataframe(list_suppliers(conn), use_container_width=True)
 
 # ----------------- Configurações -----------------
 elif menu == 'Configurações':
-    st.title('Configurações do Sistema')
-    
+    st.title('⚙️ Configurações do Sistema')
+
     st.subheader('🔐 Gerenciar Usuários')
     if user['role'] == 'admin':
         with st.form('create_user'):
@@ -651,10 +731,10 @@ elif menu == 'Configurações':
         st.info('Contate o administrador para adicionar usuários.')
 
     st.markdown('---')
-    
+
     st.subheader('⚡ Modo Demonstração (Demo)')
     st.info("Use esta opção para preencher o sistema com dados fictícios e testar os gráficos.")
-    
+
     col_demo1, col_demo2 = st.columns([1, 2])
     with col_demo1:
         if st.button('✨ Gerar Dados de Demo', type='primary'):
@@ -675,6 +755,9 @@ elif menu == 'Configurações':
             os.remove(DB_PATH)
         st.warning('Banco deletado. Por favor, recarregue a página (F5).')
 
-# Rodapé lateral
+# Rodapé lateral estilizado
 st.sidebar.markdown('---')
-st.sidebar.markdown('**Sistema Modelo C**\nv2.0 (Corrigido)')
+st.sidebar.markdown(
+    """
+    <div style="text-align: center; color: gray; font-size: 0.8em;">
+        PeegFlow System v2.1
